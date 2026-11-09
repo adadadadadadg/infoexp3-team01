@@ -46,3 +46,23 @@ button {
     color: #64748b;
     font-size: .85rem
 }
+
+
+.reactions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.reaction-btn {
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 20px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.reaction-btn:hover {
+    background: #f0f0f0;
+}
