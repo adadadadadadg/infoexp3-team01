@@ -66,3 +66,54 @@ button {
 .reaction-btn:hover {
     background: #f0f0f0;
 }
+
+.product img {
+    display: block;
+    max-width: 100%;
+    max-height: 320px;
+    object-fit: contain;
+}
+
+.product .price {
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.product .purchase-btn {
+    color: white;
+    cursor: pointer;
+}
+
+.product .sold-label {
+    color: #64748b;
+    font-weight: 700;
+}
+
+.product .detail-btn {
+    color: white;
+    cursor: pointer;
+}
+
+.product .cancel-listing-btn {
+    background: #b91c1c;
+    color: white;
+    cursor: pointer;
+}
+
+.tab-bar {
+    display: flex;
+    gap: 8px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.tab-button {
+    width: auto;
+    flex: 1;
+    margin-bottom: 0;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+}
+
+.tab-button[aria-selected="false"] {
+    background: #e2e8f0;
+}
