@@ -94,15 +94,46 @@ async function loadProducts() {
   const products = await r.json();
 
   document.querySelector('#products').innerHTML = products
-    .map(p => `
-      <article class="message product">
-        <img src="${escapeHtml(p.image)}" alt="商品画像">
-        <h3>${escapeHtml(p.name)}</h3>
-        <p class="price">${Number(p.price).toLocaleString()}円</p>
-        <p>${escapeHtml(p.description)}</p>
-      </article>
-    `)
+    .map(p => {
+      const reactions = p.reactions || {};
+
+      return `
+        <article class="message product">
+          <img src="${escapeHtml(p.image)}" alt="商品画像">
+          <h3>${escapeHtml(p.name)}</h3>
+          <p class="price">${Number(p.price).toLocaleString()}円</p>
+          <p>${escapeHtml(p.description)}</p>
+          <div class="reactions">
+            ${['👍', '❤️', '😂', '🔥']
+              .map(
+                emoji => `
+                  <button class="reaction-btn"
+                      onclick="toggleProductReaction(${p.id}, '${emoji}')">
+                      ${emoji} ${reactions[emoji] || 0}
+                  </button>
+                `
+              )
+              .join('')}
+          </div>
+        </article>
+      `;
+    })
     .join('');
+}
+
+// 商品リアクションの追加・取り消し
+async function toggleProductReaction(id, emoji) {
+  const r = await fetch(`/api/products/${id}/reactions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ reaction: emoji }),
+  });
+
+  if (r.ok) {
+    await loadProducts();
+  }
 }
 
 // 商品の出品処理

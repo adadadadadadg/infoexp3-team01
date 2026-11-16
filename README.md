@@ -15,7 +15,11 @@ docker run --rm -p 5000:5000 miniboard
 ## API
 - GET `/api/messages`
 - POST `/api/messages`
+- POST `/api/messages/<id>/reactions`
 - PUT `/api/messages/<id>`
 - DELETE `/api/messages/<id>`
+- GET `/api/products`
+- POST `/api/products`
+- POST `/api/products/<id>/reactions`
 
 > 授業用。Public URLに個人情報・秘密情報を入力しないこと。

@@ -51,6 +51,13 @@ def init_db():
             created_at TEXT NOT NULL
         )""")
 
+        con.execute("""CREATE TABLE IF NOT EXISTS product_reactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL,
+            reaction TEXT NOT NULL,
+            FOREIGN KEY(product_id) REFERENCES products(id)
+        )""")
+
 
 @app.get("/")
 def index():
@@ -193,8 +200,70 @@ def get_products():
         rows = con.execute(
             "SELECT * FROM products ORDER BY id DESC"
         ).fetchall()
+        products = []
 
-    return jsonify([dict(row) for row in rows])
+        for row in rows:
+            data = dict(row)
+            counts = con.execute(
+                "SELECT reaction, COUNT(*) AS count FROM product_reactions "
+                "WHERE product_id=? GROUP BY reaction",
+                (row["id"],)
+            ).fetchall()
+            data["reactions"] = {
+                r["reaction"]: r["count"] for r in counts
+            }
+            products.append(data)
+
+    return jsonify(products)
+
+
+# 商品リアクションの追加・取り消し
+@app.post("/api/products/<int:product_id>/reactions")
+def toggle_product_reaction(product_id):
+    data = request.get_json(silent=True) or {}
+    reaction = data.get("reaction")
+
+    if reaction not in REACTIONS:
+        return jsonify({"error": "invalid reaction"}), 400
+
+    with connect() as con:
+        product = con.execute(
+            "SELECT id FROM products WHERE id=?", (product_id,)
+        ).fetchone()
+
+        if product is None:
+            return jsonify({"error": "not found"}), 404
+
+        existing = con.execute(
+            "SELECT id FROM product_reactions "
+            "WHERE product_id=? AND reaction=? LIMIT 1",
+            (product_id, reaction)
+        ).fetchone()
+
+        if existing:
+            con.execute(
+                "DELETE FROM product_reactions WHERE id=?",
+                (existing["id"],)
+            )
+            action = "removed"
+        else:
+            con.execute(
+                "INSERT INTO product_reactions(product_id,reaction) "
+                "VALUES(?,?)",
+                (product_id, reaction)
+            )
+            action = "added"
+
+        counts = con.execute(
+            "SELECT reaction, COUNT(*) AS count FROM product_reactions "
+            "WHERE product_id=? GROUP BY reaction",
+            (product_id,)
+        ).fetchall()
+
+    return jsonify({
+        "action": action,
+        "reactions": {r["reaction"]: r["count"] for r in counts}
+    })
 
 
 # 商品を出品
@@ -244,6 +313,7 @@ def create_product():
         ).fetchone()
 
     return jsonify(dict(row)), 201
+
 
 
 if __name__ == "__main__":
