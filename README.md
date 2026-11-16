@@ -15,11 +15,13 @@ docker run --rm -p 5000:5000 miniboard
 ## API
 - GET `/api/messages`
 - POST `/api/messages`
+- POST `/api/messages/<id>/reactions`
 - PUT `/api/messages/<id>`
 - DELETE `/api/messages/<id>`
 - GET `/api/products` — 商品一覧（購入済み商品には `sold: true`）
 - GET `/api/products/<id>/comments` — 商品のコメント一覧
 - POST `/api/products/<id>/comments` — 商品にコメントを投稿（`name`, `comment`）
+- POST `/api/products/<id>/reactions` — 商品へのリアクション追加・取り消し
 - GET `/api/orders?buyer_name=<name>` — 購入者名に一致する注文履歴
 - POST `/api/products` — 商品を出品
 - POST `/api/products/<id>/purchase` — 購入者名を指定して注文を記録

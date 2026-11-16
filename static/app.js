@@ -98,22 +98,53 @@ async function loadProducts() {
   productsById = new Map(products.map(product => [product.id, product]));
 
   document.querySelector('#products').innerHTML = products
-    .map(p => `
-      <article class="message product">
-        <img src="${escapeHtml(p.image)}" alt="商品画像">
-        <h3>${escapeHtml(p.name)}</h3>
-        <p class="price">${Number(p.price).toLocaleString()}円</p>
-        <p>${escapeHtml(p.description)}</p>
-        ${p.sold ? '<p class="sold-label">売り切れ</p>' : ''}
-        <button type="button" class="detail-btn"
-            onclick="openProductDetails(${p.id})">商品を見る</button>
-        ${p.sold
-          ? ''
-          : `<button type="button" class="cancel-listing-btn"
-              onclick="cancelListing(${p.id})">出品を取り消す</button>`}
-      </article>
-    `)
+.map(p => {
+      const reactions = p.reactions || {};
+
+      return `
+        <article class="message product">
+          <img src="${escapeHtml(p.image)}" alt="商品画像">
+          <h3>${escapeHtml(p.name)}</h3>
+          <p class="price">${Number(p.price).toLocaleString()}円</p>
+          <p>${escapeHtml(p.description)}</p>
+          ${p.sold ? '<p class="sold-label">売り切れ</p>' : ''}
+          <div class="reactions">
+            ${['👍', '❤️', '😂', '🔥']
+              .map(
+                emoji => `
+                  <button type="button" class="reaction-btn"
+                      onclick="toggleProductReaction(${p.id}, '${emoji}')">
+                      ${emoji} ${reactions[emoji] || 0}
+                  </button>
+                `
+              )
+              .join('')}
+          </div>
+          <button type="button" class="detail-btn"
+              onclick="openProductDetails(${p.id})">商品を見る</button>
+          ${p.sold
+            ? ''
+            : `<button type="button" class="cancel-listing-btn"
+                onclick="cancelListing(${p.id})">出品を取り消す</button>`}
+        </article>
+      `;
+    })
     .join('');
+}
+
+// 商品リアクションの追加・取り消し
+async function toggleProductReaction(id, emoji) {
+  const r = await fetch(`/api/products/${id}/reactions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ reaction: emoji }),
+  });
+
+  if (r.ok) {
+    await loadProducts();
+  }
 }
 
 // 商品詳細とコメント欄を表示
@@ -344,7 +375,6 @@ document.querySelector('#history-tab').addEventListener('click', event => {
   selectProductTab(event.currentTarget);
 });
 document.querySelector('#load-history').addEventListener('click', loadPurchaseHistory);
-
 // 商品の出品処理
 document.querySelector('#product-form').addEventListener('submit', async e => {
   e.preventDefault();
