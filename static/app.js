@@ -1,6 +1,30 @@
+let messagesLoadVersion = 0;
+
 async function loadMessages() {
-  const r = await fetch('/api/messages');
+  const loadVersion = ++messagesLoadVersion;
+  const status = document.querySelector('#messages-status');
+  let r;
+
+  try {
+    r = await fetch('/api/messages');
+  } catch {
+    if (loadVersion === messagesLoadVersion) {
+      status.textContent = '投稿を読み込めませんでした。再読み込みしてください。';
+    }
+    return;
+  }
+
+  if (!r.ok) {
+    if (loadVersion === messagesLoadVersion) {
+      status.textContent = '投稿を読み込めませんでした。再読み込みしてください。';
+    }
+    return;
+  }
+
   const xs = await r.json();
+  if (loadVersion !== messagesLoadVersion) {
+    return;
+  }
 
   document.querySelector('#messages').innerHTML = xs
     .map(x => {
@@ -28,6 +52,7 @@ async function loadMessages() {
         `;
     })
     .join('');
+  status.textContent = '';
 }
 
 // HTMLとして危険な文字を変換する
@@ -98,13 +123,14 @@ async function loadProducts() {
   productsById = new Map(products.map(product => [product.id, product]));
 
   document.querySelector('#products').innerHTML = products
-.map(p => {
+    .map(p => {
       const reactions = p.reactions || {};
 
       return `
         <article class="message product">
           <img src="${escapeHtml(p.image)}" alt="商品画像">
           <h3>${escapeHtml(p.name)}</h3>
+          <p>出品者: ${escapeHtml(p.seller_name || '未登録')}</p>
           <p class="price">${Number(p.price).toLocaleString()}円</p>
           <p>${escapeHtml(p.description)}</p>
           ${p.sold ? '<p class="sold-label">売り切れ</p>' : ''}
@@ -162,6 +188,7 @@ async function openProductDetails(productId) {
   document.querySelector('#product-detail-content').innerHTML = `
     <img src="${escapeHtml(product.image)}" alt="商品画像">
     <h2>${escapeHtml(product.name)}</h2>
+    <p>出品者: ${escapeHtml(product.seller_name || '未登録')}</p>
     <p class="price">${Number(product.price).toLocaleString()}円</p>
     <p>${escapeHtml(product.description)}</p>
     ${product.sold
@@ -286,17 +313,11 @@ async function purchaseProduct(productId) {
   if (r.ok) {
     document.querySelector('#history-buyer-name').value = buyerName;
     await loadProducts();
-    if (
-      selectedProductId === productId &&
-      !document.querySelector('#products-panel').hidden
-    ) {
-      await openProductDetails(productId);
-    }
-    status.textContent =
-      `購入しました。注文番号 #${result.id}（${result.product_name}）`;
-    if (!document.querySelector('#history-panel').hidden) {
-      await loadPurchaseHistory();
-    }
+    status.textContent = `購入しました。注文番号 #${result.id}（${result.product_name}）`;
+    await selectProductTab(document.querySelector('#history-tab'));
+    document.querySelector('#history-status').textContent =
+      `購入しました。注文番号 #${result.id} の会話を始められます。`;
+    await openOrderChat(result.id);
   } else {
     if (r.status === 409) {
       await loadProducts();
@@ -313,18 +334,18 @@ async function purchaseProduct(productId) {
 
 // 購入者名に一致する注文履歴を表示
 async function loadPurchaseHistory() {
-  const buyerName = document.querySelector('#history-buyer-name').value.trim();
+  const participantName = document.querySelector('#history-buyer-name').value.trim();
   const status = document.querySelector('#history-status');
   const history = document.querySelector('#purchase-history');
 
-  if (!buyerName) {
-    status.textContent = '購入者名を入力してください';
+  if (!participantName) {
+    status.textContent = '購入者名または出品者名を入力してください';
     history.innerHTML = '';
     document.querySelector('#history-buyer-name').focus();
     return;
   }
 
-  const params = new URLSearchParams({ buyer_name: buyerName });
+  const params = new URLSearchParams({ participant_name: participantName });
   const r = await fetch(`/api/orders?${params}`);
   const orders = await r.json();
 
@@ -339,13 +360,80 @@ async function loadPurchaseHistory() {
       <article class="message">
         <h3>${escapeHtml(order.product_name)}</h3>
         <p class="price">${Number(order.price).toLocaleString()}円</p>
+        <p>購入者: ${escapeHtml(order.buyer_name)} ・ 出品者: ${escapeHtml(order.seller_name || '未登録')}</p>
         <p class="meta">注文番号 #${order.id} ・
           ${escapeHtml(new Date(order.created_at).toLocaleString('ja-JP'))}
         </p>
+        <button type="button" class="detail-btn"
+            onclick="openOrderChat(${order.id})">会話を開く</button>
       </article>
     `)
     .join('');
 }
+
+async function openOrderChat(orderId) {
+  const participantName = document.querySelector('#history-buyer-name').value.trim();
+  const chat = document.querySelector('#order-chat');
+  const status = document.querySelector('#order-chat-status');
+  const messages = document.querySelector('#order-chat-messages');
+
+  activeOrderChatId = null;
+  chat.hidden = false;
+  document.querySelector('#order-chat-title').textContent =
+    `注文 #${orderId} の会話`;
+  status.textContent = '会話を読み込み中...';
+  messages.innerHTML = '';
+
+  const params = new URLSearchParams({ participant_name: participantName });
+  const r = await fetch(`/api/orders/${orderId}/messages?${params}`);
+  const result = await r.json();
+  if (!r.ok) {
+    status.textContent = result.error || '会話を読み込めませんでした';
+    return;
+  }
+
+  activeOrderChatId = orderId;
+  status.textContent = result.length ? '' : '最初のメッセージを送信しましょう。';
+  messages.innerHTML = result.map(message => `
+    <article class="order-chat-message">
+      <b>${escapeHtml(message.sender_name)}</b>
+      <p>${escapeHtml(message.message)}</p>
+      <p class="meta">${escapeHtml(new Date(message.created_at).toLocaleString('ja-JP'))}</p>
+    </article>
+  `).join('');
+}
+
+let activeOrderChatId = null;
+
+document.querySelector('#order-chat-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (activeOrderChatId === null) {
+    return;
+  }
+
+  const participantName = document.querySelector('#history-buyer-name').value.trim();
+  const message = document.querySelector('#order-chat-message').value;
+  const status = document.querySelector('#order-chat-status');
+  const r = await fetch(`/api/orders/${activeOrderChatId}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ participant_name: participantName, message }),
+  });
+  const result = await r.json();
+
+  if (!r.ok) {
+    status.textContent = result.error || 'メッセージを送信できませんでした';
+    return;
+  }
+
+  document.querySelector('#order-chat-message').value = '';
+  await openOrderChat(activeOrderChatId);
+});
+
+document.querySelector('#close-order-chat').addEventListener('click', () => {
+  activeOrderChatId = null;
+  document.querySelector('#order-chat').hidden = true;
+});
 
 // 商品一覧と購入履歴のタブ切り替え
 function selectProductTab(selectedTab) {
@@ -361,7 +449,7 @@ function selectProductTab(selectedTab) {
   });
 
   if (selectedTab.id === 'history-tab') {
-    loadPurchaseHistory();
+    return loadPurchaseHistory();
   }
 }
 
@@ -381,6 +469,7 @@ document.querySelector('#product-form').addEventListener('submit', async e => {
 
   const formData = new FormData();
   formData.append('name', document.querySelector('#product-name').value);
+  formData.append('seller_name', document.querySelector('#seller-name').value);
   formData.append('price', document.querySelector('#price').value);
   formData.append('description', document.querySelector('#description').value);
   formData.append('image', document.querySelector('#image').files[0]);

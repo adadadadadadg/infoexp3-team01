@@ -48,6 +48,7 @@ def init_db():
             price INTEGER NOT NULL,
             description TEXT NOT NULL,
             image TEXT NOT NULL,
+            seller_name TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL
         )""")
 
@@ -65,8 +66,34 @@ con.execute("""CREATE TABLE IF NOT EXISTS product_reactions (
             product_name TEXT NOT NULL,
             price INTEGER NOT NULL,
             buyer_name TEXT NOT NULL,
+            seller_name TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL,
             FOREIGN KEY(product_id) REFERENCES products(id)
+        )""")
+
+        product_columns = {
+            row["name"] for row in con.execute("PRAGMA table_info(products)")
+        }
+        if "seller_name" not in product_columns:
+            con.execute(
+                "ALTER TABLE products ADD COLUMN seller_name TEXT NOT NULL DEFAULT ''"
+            )
+
+        order_columns = {
+            row["name"] for row in con.execute("PRAGMA table_info(orders)")
+        }
+        if "seller_name" not in order_columns:
+            con.execute(
+                "ALTER TABLE orders ADD COLUMN seller_name TEXT NOT NULL DEFAULT ''"
+            )
+
+        con.execute("""CREATE TABLE IF NOT EXISTS order_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            sender_name TEXT NOT NULL,
+            message TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(order_id) REFERENCES orders(id)
         )""")
 
         con.execute("""CREATE TABLE IF NOT EXISTS product_comments (
@@ -285,15 +312,18 @@ def create_product_comment(product_id):
 
 @app.get("/api/orders")
 def get_orders():
-    buyer_name = request.args.get("buyer_name", "").strip()[:30]
-    if not buyer_name:
+    participant_name = request.args.get(
+        "participant_name", request.args.get("buyer_name", "")
+    ).strip()[:30]
+    if not participant_name:
         return jsonify({"error": "購入者名を入力してください"}), 400
 
     with connect() as con:
         rows = con.execute(
-            """SELECT id, product_id, product_name, price, created_at
-            FROM orders WHERE buyer_name=? ORDER BY id DESC""",
-            (buyer_name,)
+            """SELECT id, product_id, product_name, price, buyer_name,
+            seller_name, created_at FROM orders
+            WHERE buyer_name=? OR seller_name=? ORDER BY id DESC""",
+            (participant_name, participant_name)
         ).fetchall()
         products = []
 
@@ -361,6 +391,75 @@ def toggle_product_reaction(product_id):
     })
 
 
+def order_for_participant(order_id, participant_name):
+    with connect() as con:
+        order = con.execute(
+            """SELECT id, buyer_name, seller_name FROM orders WHERE id=?""",
+            (order_id,)
+        ).fetchone()
+
+    if order is None:
+        return None, (jsonify({"error": "注文が見つかりません"}), 404)
+    if participant_name not in (order["buyer_name"], order["seller_name"]):
+        return None, (jsonify({"error": "この注文の会話に参加できません"}), 403)
+    return order, None
+
+
+@app.get("/api/orders/<int:order_id>/messages")
+def get_order_messages(order_id):
+    participant_name = request.args.get("participant_name", "").strip()[:30]
+    if not participant_name:
+        return jsonify({"error": "参加者名を入力してください"}), 400
+
+    order, error = order_for_participant(order_id, participant_name)
+    if error:
+        return error
+
+    with connect() as con:
+        rows = con.execute(
+            """SELECT id, sender_name, message, created_at
+            FROM order_messages WHERE order_id=? ORDER BY id""",
+            (order["id"],)
+        ).fetchall()
+
+    return jsonify([dict(row) for row in rows])
+
+
+@app.post("/api/orders/<int:order_id>/messages")
+def create_order_message(order_id):
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "参加者名とメッセージを入力してください"}), 400
+
+    participant_name = data.get("participant_name")
+    message = data.get("message")
+    if not isinstance(participant_name, str) or not participant_name.strip():
+        return jsonify({"error": "参加者名を入力してください"}), 400
+    if not isinstance(message, str) or not message.strip():
+        return jsonify({"error": "メッセージを入力してください"}), 400
+
+    participant_name = participant_name.strip()[:30]
+    message = message.strip()[:1000]
+    order, error = order_for_participant(order_id, participant_name)
+    if error:
+        return error
+
+    created_at = datetime.now(timezone.utc).isoformat()
+    with connect() as con:
+        cur = con.execute(
+            """INSERT INTO order_messages
+            (order_id, sender_name, message, created_at) VALUES (?, ?, ?, ?)""",
+            (order["id"], participant_name, message, created_at)
+        )
+        row = con.execute(
+            """SELECT id, sender_name, message, created_at
+            FROM order_messages WHERE id=?""",
+            (cur.lastrowid,)
+        ).fetchone()
+
+    return jsonify(dict(row)), 201
+
+
 @app.post("/api/products/<int:product_id>/purchase")
 def purchase_product(product_id):
     data = request.get_json(silent=True) or {}
@@ -378,8 +477,8 @@ def purchase_product(product_id):
     with connect() as con:
         cur = con.execute(
             """INSERT INTO orders
-            (product_id, product_name, price, buyer_name, created_at)
-            SELECT id, name, price, ?, ?
+            (product_id, product_name, price, buyer_name, seller_name, created_at)
+            SELECT id, name, price, ?, seller_name, ?
             FROM products
             WHERE id=? AND NOT EXISTS (
                 SELECT 1 FROM orders WHERE product_id=products.id
@@ -430,11 +529,12 @@ def cancel_product_listing(product_id):
 @app.post("/api/products")
 def create_product():
     name = request.form.get("name", "").strip()[:100]
+    seller_name = request.form.get("seller_name", "").strip()[:30]
     description = request.form.get("description", "").strip()[:1000]
     price_text = request.form.get("price", "").strip()
     image = request.files.get("image")
 
-    if not name or not description or not price_text or not image:
+    if not name or not seller_name or not description or not price_text or not image:
         return jsonify({"error": "すべての項目を入力してください"}), 400
 
     try:
@@ -462,9 +562,9 @@ def create_product():
     with connect() as con:
         cur = con.execute(
             """INSERT INTO products
-            (name, price, description, image, created_at)
-            VALUES (?, ?, ?, ?, ?)""",
-            (name, price, description, image_url, created_at)
+            (name, price, description, image, seller_name, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            (name, price, description, image_url, seller_name, created_at)
         )
 
         row = con.execute(

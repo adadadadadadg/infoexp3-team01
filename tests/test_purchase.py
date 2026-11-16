@@ -68,6 +68,67 @@ class PurchaseTests(unittest.TestCase):
         self.assertEqual(other_history.json, [])
         self.assertEqual(missing_name.status_code, 400)
 
+    def test_order_messages_are_available_to_buyer_and_seller_only(self):
+        with miniboard.connect() as con:
+            con.execute(
+                "UPDATE products SET seller_name=? WHERE id=?",
+                ("出品者", self.product_id),
+            )
+        purchase = self.client.post(
+            f"/api/products/{self.product_id}/purchase",
+            json={"buyer_name": "購入者"},
+        )
+        order_id = purchase.json["id"]
+
+        buyer_message = self.client.post(
+            f"/api/orders/{order_id}/messages",
+            json={"participant_name": "購入者", "message": "届くのが楽しみです"},
+        )
+        seller_message = self.client.post(
+            f"/api/orders/{order_id}/messages",
+            json={"participant_name": "出品者", "message": "ありがとうございます"},
+        )
+        buyer_view = self.client.get(
+            f"/api/orders/{order_id}/messages?participant_name=%E8%B3%BC%E5%85%A5%E8%80%85"
+        )
+        seller_view = self.client.get(
+            f"/api/orders/{order_id}/messages?participant_name=%E5%87%BA%E5%93%81%E8%80%85"
+        )
+        stranger_view = self.client.get(
+            f"/api/orders/{order_id}/messages?participant_name=%E5%88%A5%E4%BA%BA"
+        )
+
+        self.assertEqual(purchase.status_code, 201)
+        self.assertEqual(purchase.json["seller_name"], "出品者")
+        self.assertEqual(buyer_message.status_code, 201)
+        self.assertEqual(seller_message.status_code, 201)
+        self.assertEqual(len(buyer_view.json), 2)
+        self.assertEqual(len(seller_view.json), 2)
+        self.assertEqual(stranger_view.status_code, 403)
+
+    def test_order_messages_require_valid_participant_and_message(self):
+        purchase = self.client.post(
+            f"/api/products/{self.product_id}/purchase",
+            json={"buyer_name": "購入者"},
+        )
+        order_id = purchase.json["id"]
+
+        missing_name = self.client.post(
+            f"/api/orders/{order_id}/messages",
+            json={"participant_name": " ", "message": "メッセージ"},
+        )
+        missing_message = self.client.post(
+            f"/api/orders/{order_id}/messages",
+            json={"participant_name": "購入者", "message": " "},
+        )
+        missing_order = self.client.get(
+            "/api/orders/999/messages?participant_name=%E8%B3%BC%E5%85%A5%E8%80%85"
+        )
+
+        self.assertEqual(missing_name.status_code, 400)
+        self.assertEqual(missing_message.status_code, 400)
+        self.assertEqual(missing_order.status_code, 404)
+
     def test_requires_buyer_name_and_existing_product(self):
         missing_name = self.client.post(
             f"/api/products/{self.product_id}/purchase",

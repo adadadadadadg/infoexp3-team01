@@ -120,3 +120,18 @@ button {
 .tab-button[aria-selected="false"] {
     background: #e2e8f0;
 }
+
+.order-chat {
+    margin-top: 24px;
+    padding: 16px;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    background: #f1f5f9;
+}
+
+.order-chat-message {
+    margin: 10px 0;
+    padding: 12px;
+    border-radius: 8px;
+    background: white;
+}
