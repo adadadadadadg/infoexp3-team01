@@ -52,7 +52,7 @@ def init_db():
             created_at TEXT NOT NULL
         )""")
 
-con.execute("""CREATE TABLE IF NOT EXISTS product_reactions (
+        con.execute("""CREATE TABLE IF NOT EXISTS product_reactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             product_id INTEGER NOT NULL,
             reaction TEXT NOT NULL,
@@ -103,7 +103,7 @@ con.execute("""CREATE TABLE IF NOT EXISTS product_reactions (
             comment TEXT NOT NULL,
             created_at TEXT NOT NULL,
             FOREIGN KEY(product_id) REFERENCES products(id)
-        )"""))
+        )""")
 
 
 @app.get("/")
