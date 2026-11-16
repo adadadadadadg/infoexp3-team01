@@ -51,7 +51,7 @@ def init_db():
             created_at TEXT NOT NULL
         )""")
 
-con.execute("""CREATE TABLE IF NOT EXISTS product_reactions (
+        con.execute("""CREATE TABLE IF NOT EXISTS product_reactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             product_id INTEGER NOT NULL,
             reaction TEXT NOT NULL,
@@ -76,7 +76,7 @@ con.execute("""CREATE TABLE IF NOT EXISTS product_reactions (
             comment TEXT NOT NULL,
             created_at TEXT NOT NULL,
             FOREIGN KEY(product_id) REFERENCES products(id)
-        )"""))
+        )""")
 
 
 @app.get("/")
@@ -224,8 +224,21 @@ def get_products():
             ) AS sold
             FROM products ORDER BY id DESC"""
         ).fetchall()
+        products = []
 
-    return jsonify([dict(row) for row in rows])
+        for row in rows:
+            data = dict(row)
+            counts = con.execute(
+                "SELECT reaction, COUNT(*) AS count FROM product_reactions "
+                "WHERE product_id=? GROUP BY reaction",
+                (row["id"],)
+            ).fetchall()
+            data["reactions"] = {
+                r["reaction"]: r["count"] for r in counts
+            }
+            products.append(data)
+
+    return jsonify(products)
 
 
 @app.get("/api/products/<int:product_id>/comments")
@@ -295,21 +308,8 @@ def get_orders():
             FROM orders WHERE buyer_name=? ORDER BY id DESC""",
             (buyer_name,)
         ).fetchall()
-        products = []
 
-        for row in rows:
-            data = dict(row)
-            counts = con.execute(
-                "SELECT reaction, COUNT(*) AS count FROM product_reactions "
-                "WHERE product_id=? GROUP BY reaction",
-                (row["id"],)
-            ).fetchall()
-            data["reactions"] = {
-                r["reaction"]: r["count"] for r in counts
-            }
-            products.append(data)
-
-    return jsonify(products)
+    return jsonify([dict(row) for row in rows])
 
 
 # 商品リアクションの追加・取り消し
@@ -418,6 +418,9 @@ def cancel_product_listing(product_id):
         if order is not None:
             return jsonify({"error": "購入済みの商品は取り消せません"}), 409
 
+        con.execute(
+            "DELETE FROM product_reactions WHERE product_id=?", (product_id,)
+        )
         con.execute(
             "DELETE FROM product_comments WHERE product_id=?", (product_id,)
         )
