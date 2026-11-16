@@ -87,3 +87,50 @@ document.querySelector('#form').addEventListener('submit', async e => {
 });
 
 loadMessages();
+
+// 商品一覧を読み込む
+async function loadProducts() {
+  const r = await fetch('/api/products');
+  const products = await r.json();
+
+  document.querySelector('#products').innerHTML = products
+    .map(p => `
+      <article class="message product">
+        <img src="${escapeHtml(p.image)}" alt="商品画像">
+        <h3>${escapeHtml(p.name)}</h3>
+        <p class="price">${Number(p.price).toLocaleString()}円</p>
+        <p>${escapeHtml(p.description)}</p>
+      </article>
+    `)
+    .join('');
+}
+
+// 商品の出品処理
+document.querySelector('#product-form').addEventListener('submit', async e => {
+  e.preventDefault();
+
+  const formData = new FormData();
+  formData.append('name', document.querySelector('#product-name').value);
+  formData.append('price', document.querySelector('#price').value);
+  formData.append('description', document.querySelector('#description').value);
+  formData.append('image', document.querySelector('#image').files[0]);
+
+  const r = await fetch('/api/products', {
+    method: 'POST',
+    body: formData
+  });
+
+  const status = document.querySelector('#product-status');
+
+  if (r.ok) {
+    status.textContent = '商品を出品しました！';
+    document.querySelector('#product-form').reset();
+    await loadProducts();
+  } else {
+    const result = await r.json();
+    status.textContent = result.error || '出品に失敗しました';
+  }
+});
+
+// 商品一覧を最初に表示
+loadProducts();

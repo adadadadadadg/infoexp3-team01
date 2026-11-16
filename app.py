@@ -2,26 +2,27 @@
 from flask import Flask, jsonify, render_template, request
 from pathlib import Path
 import sqlite3
-
+from datetime import datetime, timezone
 from werkzeug.utils import secure_filename
 from uuid import uuid4
-from datetime import datetime, timezone
+
+app = Flask(__name__)
+DB = Path("data/miniboard.db")
 
 UPLOAD_FOLDER = Path("static/uploads")
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
-app = Flask(__name__)
-DB = Path("data/miniboard.db")
-
 # リアクションの種類
 REACTIONS = ["👍", "❤️", "😂", "🔥"]
+
 
 def connect():
     DB.parent.mkdir(exist_ok=True)
     con = sqlite3.connect(DB)
     con.row_factory = sqlite3.Row
     return con
+
 
 def init_db():
     with connect() as con:
@@ -40,7 +41,7 @@ def init_db():
             FOREIGN KEY(message_id) REFERENCES messages(id)
         )""")
 
-                # 商品情報を保存するテーブル
+        # 商品情報を保存するテーブル
         con.execute("""CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -50,14 +51,18 @@ def init_db():
             created_at TEXT NOT NULL
         )""")
 
+
 @app.get("/")
 def index():
     return render_template("index.html")
 
+
 @app.get("/api/messages")
 def get_messages():
     with connect() as con:
-        rows = con.execute("SELECT * FROM messages ORDER BY id DESC").fetchall()
+        rows = con.execute(
+            "SELECT * FROM messages ORDER BY id DESC"
+        ).fetchall()
         messages = []
 
         for row in rows:
@@ -68,10 +73,13 @@ def get_messages():
                 (row["id"],)
             ).fetchall()
 
-            data["reactions"] = {r["reaction"]: r["count"] for r in counts}
+            data["reactions"] = {
+                r["reaction"]: r["count"] for r in counts
+            }
             messages.append(data)
 
     return jsonify(messages)
+
 
 @app.post("/api/messages")
 def create_message():
@@ -96,6 +104,7 @@ def create_message():
 
     return jsonify(dict(row)), 201
 
+
 # リアクションの追加・取り消し
 @app.post("/api/messages/<int:message_id>/reactions")
 def toggle_reaction(message_id):
@@ -113,14 +122,15 @@ def toggle_reaction(message_id):
         if message is None:
             return jsonify({"error": "not found"}), 404
 
-        # 同じリアクションがあれば取り消す
         existing = con.execute(
             "SELECT id FROM reactions WHERE message_id=? AND reaction=? LIMIT 1",
             (message_id, reaction)
         ).fetchone()
 
         if existing:
-            con.execute("DELETE FROM reactions WHERE id=?", (existing["id"],))
+            con.execute(
+                "DELETE FROM reactions WHERE id=?", (existing["id"],)
+            )
             action = "removed"
         else:
             con.execute(
@@ -140,6 +150,7 @@ def toggle_reaction(message_id):
         "reactions": {r["reaction"]: r["count"] for r in counts}
     })
 
+
 @app.put("/api/messages/<int:message_id>")
 def update_message(message_id):
     data = request.get_json(silent=True) or {}
@@ -158,6 +169,7 @@ def update_message(message_id):
 
     return jsonify({"ok": True})
 
+
 @app.delete("/api/messages/<int:message_id>")
 def delete_message(message_id):
     with connect() as con:
@@ -172,6 +184,7 @@ def delete_message(message_id):
             return jsonify({"error": "not found"}), 404
 
     return "", 204
+
 
 # 商品一覧を取得
 @app.get("/api/products")
@@ -231,6 +244,7 @@ def create_product():
         ).fetchone()
 
     return jsonify(dict(row)), 201
+
 
 if __name__ == "__main__":
     init_db()
