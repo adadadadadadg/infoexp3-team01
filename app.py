@@ -2,7 +2,14 @@
 from flask import Flask, jsonify, render_template, request
 from pathlib import Path
 import sqlite3
+
+from werkzeug.utils import secure_filename
+from uuid import uuid4
 from datetime import datetime, timezone
+
+UPLOAD_FOLDER = Path("static/uploads")
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
 app = Flask(__name__)
 DB = Path("data/miniboard.db")
@@ -31,6 +38,16 @@ def init_db():
             message_id INTEGER NOT NULL,
             reaction TEXT NOT NULL,
             FOREIGN KEY(message_id) REFERENCES messages(id)
+        )""")
+
+                # 商品情報を保存するテーブル
+        con.execute("""CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            price INTEGER NOT NULL,
+            description TEXT NOT NULL,
+            image TEXT NOT NULL,
+            created_at TEXT NOT NULL
         )""")
 
 @app.get("/")
@@ -155,6 +172,65 @@ def delete_message(message_id):
             return jsonify({"error": "not found"}), 404
 
     return "", 204
+
+# 商品一覧を取得
+@app.get("/api/products")
+def get_products():
+    with connect() as con:
+        rows = con.execute(
+            "SELECT * FROM products ORDER BY id DESC"
+        ).fetchall()
+
+    return jsonify([dict(row) for row in rows])
+
+
+# 商品を出品
+@app.post("/api/products")
+def create_product():
+    name = request.form.get("name", "").strip()[:100]
+    description = request.form.get("description", "").strip()[:1000]
+    price_text = request.form.get("price", "").strip()
+    image = request.files.get("image")
+
+    if not name or not description or not price_text or not image:
+        return jsonify({"error": "すべての項目を入力してください"}), 400
+
+    try:
+        price = int(price_text)
+        if price < 0:
+            raise ValueError
+    except ValueError:
+        return jsonify({"error": "価格は0以上の整数で入力してください"}), 400
+
+    filename = secure_filename(image.filename or "")
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+    if extension not in ALLOWED_EXTENSIONS:
+        return jsonify({"error": "対応していない画像形式です"}), 400
+
+    UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+
+    saved_name = f"{uuid4().hex}.{extension}"
+    image_path = UPLOAD_FOLDER / saved_name
+    image.save(image_path)
+
+    image_url = f"/static/uploads/{saved_name}"
+    created_at = datetime.now(timezone.utc).isoformat()
+
+    with connect() as con:
+        cur = con.execute(
+            """INSERT INTO products
+            (name, price, description, image, created_at)
+            VALUES (?, ?, ?, ?, ?)""",
+            (name, price, description, image_url, created_at)
+        )
+
+        row = con.execute(
+            "SELECT * FROM products WHERE id=?",
+            (cur.lastrowid,)
+        ).fetchone()
+
+    return jsonify(dict(row)), 201
 
 if __name__ == "__main__":
     init_db()
