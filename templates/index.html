@@ -24,10 +24,6 @@
             <input type="text" id="product-name"
                 placeholder="商品名を入力" maxlength="100" required>
 
-            <label>出品者名</label>
-            <input type="text" id="seller-name"
-                placeholder="出品者名を入力" maxlength="30" required>
-
             <label>価格（円）</label>
             <input type="number" id="price"
                 placeholder="例：1000" min="0" required>
@@ -43,66 +39,7 @@
         <p id="product-status"></p>
 
         <h2>出品中の商品</h2>
-        <div class="tab-bar" role="tablist" aria-label="商品メニュー">
-            <button type="button" class="tab-button" id="products-tab"
-                role="tab" aria-selected="true" aria-controls="products-panel">
-                商品一覧
-            </button>
-            <button type="button" class="tab-button" id="history-tab"
-                role="tab" aria-selected="false" aria-controls="history-panel">
-                購入履歴
-            </button>
-        </div>
-        <section id="products-panel" class="tab-panel"
-            role="tabpanel" aria-labelledby="products-tab">
-            <section id="products"></section>
-            <section id="product-detail" hidden>
-                <button type="button" id="back-to-products">商品一覧に戻る</button>
-                <article id="product-detail-content" class="message product"></article>
-                <form id="purchase-form" hidden>
-                    <label for="buyer-name">購入者名</label>
-                    <input type="text" id="buyer-name"
-                        placeholder="購入者名を入力" maxlength="30" required>
-                    <button type="submit">購入する</button>
-                </form>
-                <p id="purchase-status" role="status"></p>
-                <h3>コメント</h3>
-                <section id="product-comments"></section>
-                <form id="product-comment-form">
-                    <label for="comment-name">名前</label>
-                    <input type="text" id="comment-name"
-                        maxlength="30" placeholder="名前を入力" required>
-                    <label for="product-comment">コメント</label>
-                    <textarea id="product-comment" maxlength="300"
-                        placeholder="商品についてコメント" required></textarea>
-                    <button type="submit">コメントする</button>
-                </form>
-                <p id="comment-status" role="status"></p>
-            </section>
-        </section>
-        <section id="history-panel" class="tab-panel"
-            role="tabpanel" aria-labelledby="history-tab" hidden>
-            <p>購入時と同じ購入者名を入力して履歴を表示してください。</p>
-            <p>出品者は出品時に登録した出品者名を入力してください。</p>
-            <label for="history-buyer-name">購入者名または出品者名</label>
-            <input type="text" id="history-buyer-name"
-                placeholder="参加者名を入力" maxlength="30">
-            <button type="button" id="load-history">履歴を表示</button>
-            <p id="history-status" role="status"></p>
-            <section id="purchase-history"></section>
-            <section id="order-chat" class="order-chat" hidden>
-                <h3 id="order-chat-title">注文の会話</h3>
-                <button type="button" id="close-order-chat">会話を閉じる</button>
-                <section id="order-chat-messages" aria-live="polite"></section>
-                <form id="order-chat-form">
-                    <label for="order-chat-message">メッセージ</label>
-                    <textarea id="order-chat-message" maxlength="1000"
-                        placeholder="メッセージを入力" required></textarea>
-                    <button type="submit">送信</button>
-                </form>
-                <p id="order-chat-status" role="status"></p>
-            </section>
-        </section>
+        <section id="products"></section>
 
         <hr>
 
@@ -112,12 +49,10 @@
                 placeholder="Nickname" required>
             <textarea id="message" maxlength="300"
                 placeholder="Message" required></textarea>
-            <p id="char-count">0/300</p>
             <button type="submit">投稿</button>
         </form>
 
         <p id="status"></p>
-        <p id="messages-status" role="status"></p>
         <section id="messages"></section>
     </main>
 
